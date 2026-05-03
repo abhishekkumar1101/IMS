@@ -1,0 +1,74 @@
+version: "3.9"
+
+# IMS — Mission-Critical Incident Management System (Mongo-only build)
+#
+# Services:
+#   - mongodb   single replica-set (so we can use multi-doc transactions)
+#   - backend   FastAPI + asyncio worker pool
+#   - frontend  React + Vite dev server
+#
+# All other "stores" (hot-path cache, time-series sink, debounce window,
+# rate-limiter) are MongoDB collections or in-process structures inside the
+# backend. See docs/architecture.md.
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: ims-mongodb
+    restart: unless-stopped
+    command:
+      - "--replSet"
+      - "rs0"
+      - "--bind_ip_all"
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: |
+        bash -c "mongosh --quiet --eval '
+          try { rs.status().ok }
+          catch(e) {
+            rs.initiate({ _id: \"rs0\", members: [{ _id: 0, host: \"localhost:27017\" }] }).ok
+          }'"
+      interval: 5s
+      timeout: 8s
+      retries: 20
+      start_period: 5s
+
+  backend:
+    build: ./backend
+    container_name: ims-backend
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/ims?replicaSet=rs0
+      MONGO_DB: ims
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash-lite}
+      QUEUE_MAX_SIZE: "50000"
+      INGEST_RATE_LIMIT_PER_SEC: "2000"
+      WORKER_BATCH_SIZE: "500"
+      WORKER_COUNT: "4"
+      ANOMALY_MODEL_PATH: /app/ml/model.pkl
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ml:/app/ml:ro
+
+  frontend:
+    build: ./frontend
+    container_name: ims-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_BASE: http://localhost:8000
+      VITE_WS_BASE: ws://localhost:8000
+    ports:
+      - "5173:5173"
+
+volumes:
+  mongo_data:
