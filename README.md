@@ -24,7 +24,7 @@ dashboard.
 - **Real-time collaboration**: WebSocket presence + threaded comments per incident.
 - **Observability**: `/health`, `/metrics`, console throughput printer every 5 s.
 
-## Tech stack (no Docker)
+## Tech stack
 
 One MongoDB Atlas cluster handles every storage role; everything else runs in
 process. Zero external services beyond Atlas + Gemini.
@@ -40,24 +40,6 @@ process. Zero external services beyond Atlas + Gemini.
 
 ## Setup
 
-### Option A — Docker Compose (recommended for graders)
-
-Brings up MongoDB (replica set so transactions are enabled) + backend + frontend
-with one command. Per the assignment's submission guidelines.
-
-```bash
-# 1. .env at the repo root must have GEMINI_API_KEY (already populated).
-# 2. Up
-docker compose up --build
-
-# 3. Open
-http://localhost:5173
-
-# 4. Simulate a failure (any terminal):
-docker compose exec backend python /app/../scripts/simulate_failure.py --api http://localhost:8000
-# or from the host:
-python scripts/simulate_failure.py
-```
 
 Stack:
 
@@ -67,11 +49,9 @@ Stack:
 | `ims-backend`  | built from `./backend`                    | FastAPI + 4 async workers |
 | `ims-frontend` | built from `./frontend`                   | Vite dev server           |
 
-### Option B — Local (no Docker), against MongoDB Atlas
 
-Useful when Docker isn't available. The repo's `.env` already points
-`MONGODB_URI` at the assignment's free Atlas cluster (replica set, transactions
-on by default).
+
+
 
 ```bash
 # 1. Install deps (Windows):
@@ -173,17 +153,4 @@ docs/       architecture · backpressure · design-patterns · prompts/
 .env        MONGODB_URI + GEMINI_API_KEY (already populated)
 ```
 
-## Submission checklist
 
-- [x] `backend/` and `frontend/` included
-- [x] `docker-compose.yml` present and documented
-- [x] `README.md` covers setup, verification, and rubric mapping
-- [x] `docs/architecture.md` and `docs/backpressure.md` describe the actual implementation
-- [x] `scripts/simulate_failure.py` provides sample failure events
-- [x] `docs/prompts/` contains planning and spec notes
-- [x] Backend tests pass: `pytest -q` (23 passed)
-
-## Notes for evaluators
-
-- **Docker Compose** is the documented setup path per the submission guidelines (Option A). The author's local box has no Docker, so day-to-day development used the no-Docker Atlas path (Option B); both paths produce the same behaviour.
-- The compose file uses a **single-node MongoDB replica set** so the multi-doc transactions in `WorkItemRepo.close_with_rca` are exercised end-to-end. On standalone Mongo the code degrades to sequenced writes (still safe — RCA + state flip + transition write happen from a single process).
